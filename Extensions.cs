@@ -1,17 +1,21 @@
 using LibraryType = BLMyLibraryType;
+using UnityEngine;
+using System.Collections.Generic;
 
 
 /*
 
 	Use:
 
-	1) Change "BLMyLibraryType" to the proper type name of your library class
+	1) Change "BLMyLibraryType" (line 1) to the proper type name of your library class
 	2) Add the following manadatory actions to that same library and rebuild it:
 		 - Success
 		 - LogError
 		 - Unplug
 		 - Pause
 		 - WaitForDebugger
+		 - SendMessage
+		 - Wait
 	3) Call myTree.WireDefaults (); on new tree instances.
 
 */
@@ -34,24 +38,28 @@ namespace Behave.Runtime
 			tree.SetTickForward ((int)LibraryType.ActionType.Unplug, TickUnplugAction);
 			tree.SetTickForward ((int)LibraryType.ActionType.Pause, TickPauseAction);
 			tree.SetTickForward ((int)LibraryType.ActionType.WaitForDebugger, TickWaitForDebuggerAction);
+			tree.SetTickForward ((int)LibraryType.ActionType.SendMessage, TickSendMessageAction);
+			tree.SetInitForward ((int)LibraryType.ActionType.Wait, InitWaitAction);
+			tree.SetTickForward ((int)LibraryType.ActionType.Wait, TickWaitAction);
+			tree.SetResetForward ((int)LibraryType.ActionType.Wait, ResetWaitAction);
 		}
 
 
-		static BehaveResult TickSuccessAction (Tree sender, string stringParameter, float floatParameter, IAgent agent, object data)
+		static BehaveResult TickSuccessAction (Tree sender)
 		{
 			return BehaveResult.Success;
 		}
 
 
-		static BehaveResult TickLogErrorAction (Tree sender, string stringParameter, float floatParameter, IAgent agent, object data)
+		static BehaveResult TickLogErrorAction (Tree sender)
 		{
-			Debug.LogError (stringParameter);
+			Debug.LogError (sender.ActiveStringParameter);
 
 			return BehaveResult.Success;
 		}
 
 
-		static BehaveResult TickUnplugAction (Tree sender, string stringParameter, float floatParameter, IAgent agent, object data)
+		static BehaveResult TickUnplugAction (Tree sender)
 		{
 			sender.Plugged = false;
 
@@ -59,7 +67,7 @@ namespace Behave.Runtime
 		}
 
 
-		static BehaveResult TickPauseAction (Tree sender, string stringParameter, float floatParameter, IAgent agent, object data)
+		static BehaveResult TickPauseAction (Tree sender)
 		{
 			Debug.Break ();
 
@@ -67,9 +75,50 @@ namespace Behave.Runtime
 		}
 
 
-		static BehaveResult TickWaitForDebuggerAction (Tree sender, string stringParameter, float floatParameter, IAgent agent, object data)
+		static BehaveResult TickWaitForDebuggerAction (Tree sender)
 		{
 			return Behave.Debugger.Debugging.Local.ConnectionCount > 0 ? BehaveResult.Success : BehaveResult.Running;
+		}
+
+
+		static BehaveResult TickSendMessageAction (Tree sender)
+		{
+			MonoBehaviour behaviour = sender.ActiveAgent as MonoBehaviour;
+
+			if (behaviour == null)
+			{
+				return BehaveResult.Failure;
+			}
+
+			behaviour.SendMessage (sender.ActiveStringParameter, sender.ActiveFloatParameter);
+
+			return BehaveResult.Success;
+		}
+
+
+		static Dictionary<LibraryType.ContextType, float> s_Timers = new Dictionary<LibraryType.ContextType, float> ();
+		static BehaveResult InitWaitAction (Tree sender)
+		{
+			if (sender.ActiveFloatParameter < 0.0f)
+			{
+				return BehaveResult.Failure;
+			}
+
+			s_Timers[sender.GetContext ()] = Time.time + sender.ActiveFloatParameter;
+
+			return BehaveResult.Success;
+		}
+
+
+		static BehaveResult TickWaitAction (Tree sender)
+		{
+			return Time.time < s_Timers[sender.GetContext ()] ? BehaveResult.Running : BehaveResult.Success;
+		}
+
+
+		static void ResetWaitAction (Tree sender)
+		{
+			s_Timers.Remove (sender.GetContext ());
 		}
 	}
 }
